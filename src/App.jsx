@@ -8,6 +8,9 @@ export default function App() {
   const [showForm, setShowForm] = useState(false);
   const [loadingWinner, setLoadingWinner] = useState(false);
 
+  // Estado para controlar o nosso Popup customizado
+  const [modalConfig, setModalConfig] = useState(null);
+
   const carregarApostas = async () => {
     const { data, error } = await supabase
       .from("apostas_oscar")
@@ -21,7 +24,6 @@ export default function App() {
     carregarApostas();
   }, []);
 
-  // Agrupa apostas por categoria
   const apostasPorCategoria = apostas.reduce((acc, aposta) => {
     if (!acc[aposta.categoria]) {
       acc[aposta.categoria] = {
@@ -36,7 +38,6 @@ export default function App() {
     return acc;
   }, {});
 
-  // Placar inteligente: soma os ganhos ignorando espaços e maiúsculas
   const placar = apostas.reduce((acc, aposta) => {
     const nomeNormalizado = aposta.apostador.trim().toUpperCase();
 
@@ -78,28 +79,43 @@ export default function App() {
     if (!error) carregarApostas();
   };
 
-  // MESÁRIO: Editar/Desfazer Vencedor
-  const desfazerVencedor = async (categoria) => {
-    if (!window.confirm(`Deseja editar o resultado de ${categoria}?`)) return;
-    setLoadingWinner(true);
-
-    const { error } = await supabase
-      .from("apostas_oscar")
-      .update({ vencedor_real: null })
-      .eq("categoria", categoria);
-
-    setLoadingWinner(false);
-    if (!error) carregarApostas();
+  // Funções que chamam o Popup Customizado
+  const abrirModalDesfazer = (categoria) => {
+    setModalConfig({
+      title: "Editar Resultado",
+      message: `Deseja reabrir a categoria "${categoria}" para alterar o vencedor oficial?`,
+      actionLabel: "Editar",
+      actionClass: "bg-[#f2cc0d] hover:bg-yellow-500 text-black",
+      onConfirm: async () => {
+        setModalConfig(null);
+        setLoadingWinner(true);
+        const { error } = await supabase
+          .from("apostas_oscar")
+          .update({ vencedor_real: null })
+          .eq("categoria", categoria);
+        setLoadingWinner(false);
+        if (!error) carregarApostas();
+      },
+    });
   };
 
-  // APAGAR APOSTA a qualquer momento
-  const deletarAposta = async (id) => {
-    if (!window.confirm("Apagar esta aposta definitivamente?")) return;
-    const { error } = await supabase
-      .from("apostas_oscar")
-      .delete()
-      .eq("id", id);
-    if (!error) carregarApostas();
+  const abrirModalDeletar = (id) => {
+    setModalConfig({
+      title: "Apagar Palpite",
+      message:
+        "Tem certeza que deseja apagar esta aposta definitivamente? Essa ação não pode ser desfeita.",
+      actionLabel: "Apagar",
+      actionClass:
+        "bg-red-500/20 text-red-500 border border-red-500/30 hover:bg-red-500/30",
+      onConfirm: async () => {
+        setModalConfig(null);
+        const { error } = await supabase
+          .from("apostas_oscar")
+          .delete()
+          .eq("id", id);
+        if (!error) carregarApostas();
+      },
+    });
   };
 
   if (showForm) {
@@ -160,7 +176,6 @@ export default function App() {
               key={categoria}
               className={`bg-[#1e1e1e] rounded-2xl overflow-hidden shadow-2xl border transition-colors ${isFinalizado ? "border-[#f2cc0d]/30" : "border-white/5"}`}
             >
-              {/* CARD HEADER */}
               <header className="p-4 border-b border-white/5">
                 <div className="flex flex-col gap-1">
                   <h2 className="text-xl font-extrabold tracking-tight text-white leading-tight">
@@ -184,7 +199,6 @@ export default function App() {
                 </div>
               </header>
 
-              {/* BETS LIST */}
               <section className="p-4 space-y-3">
                 {dados.palpites.map((palpite) => {
                   let containerClass = "bg-white/5 border-white/5";
@@ -233,7 +247,6 @@ export default function App() {
                       key={palpite.id}
                       className={`p-4 rounded-xl border flex flex-col gap-1 transition-all ${containerClass}`}
                     >
-                      {/* LINHA SUPERIOR DO PALPITE (Nome, Tag e Lixeira) */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
                           <span
@@ -251,31 +264,33 @@ export default function App() {
                             Apostou que {apostouPerde ? "perde" : "ganha"}
                           </span>
 
-                          {/* Lixeira alinhada à direita da Tag */}
+                          {/* A lixeira com o estilo igual ao do Stitch (redondinha) */}
                           {!isFinalizado && (
                             <button
-                              onClick={() => deletarAposta(palpite.id)}
-                              className="text-zinc-500 hover:text-red-400 transition-colors p-1"
+                              onClick={() => abrirModalDeletar(palpite.id)}
+                              className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-full"
                               title="Apagar Palpite"
                             >
                               <svg
-                                className="w-4 h-4"
                                 fill="none"
+                                height="14"
                                 stroke="currentColor"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                                 strokeWidth="2"
                                 viewBox="0 0 24 24"
+                                width="14"
                                 xmlns="http://www.w3.org/2000/svg"
                               >
-                                <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                <path d="M3 6h18"></path>
+                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
                               </svg>
                             </button>
                           )}
                         </div>
                       </div>
 
-                      {/* LINHA INFERIOR DO PALPITE (Filme) */}
                       <p className={`text-base font-bold ${movieClass}`}>
                         {palpite.indicado}
                       </p>
@@ -284,7 +299,6 @@ export default function App() {
                 })}
               </section>
 
-              {/* ADMIN FOOTER */}
               <footer className="bg-black/20 p-4 border-t border-white/5">
                 {!isFinalizado ? (
                   <>
@@ -333,20 +347,20 @@ export default function App() {
                     </div>
                   </>
                 ) : (
-                  <div className="flex justify-between items-center">
-                    <div className="flex flex-col">
+                  <div className="flex justify-between items-center gap-3">
+                    <div className="flex flex-col min-w-0">
                       <span className="block text-[9px] font-black text-[#f2cc0d] uppercase tracking-[0.2em] mb-1">
                         Vencedor Oficial
                       </span>
-                      <span className="text-base font-bold text-white">
+                      <span className="text-base font-bold text-white truncate">
                         {dados.vencedor_real}
                       </span>
                     </div>
-                    {/* Botão de Editar Resultado: Ícone de Lápis */}
+                    {/* Botão Lápis com a cor oficial */}
                     <button
-                      onClick={() => desfazerVencedor(categoria)}
+                      onClick={() => abrirModalDesfazer(categoria)}
                       disabled={loadingWinner}
-                      className="text-[#f2cc0d] hover:text-white p-2.5 rounded-lg bg-[#f2cc0d]/10 hover:bg-[#f2cc0d]/20 transition-colors"
+                      className="text-[#f2cc0d] hover:text-white p-2.5 rounded-lg bg-[#f2cc0d]/10 hover:bg-[#f2cc0d]/20 transition-colors shrink-0"
                       title="Editar Resultado"
                     >
                       <svg
@@ -359,8 +373,8 @@ export default function App() {
                         viewBox="0 0 24 24"
                         xmlns="http://www.w3.org/2000/svg"
                       >
-                        <path d="M12 20h9"></path>
-                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                       </svg>
                     </button>
                   </div>
@@ -371,7 +385,6 @@ export default function App() {
         })}
       </main>
 
-      {/* FAB: NOVA APOSTA */}
       <button
         onClick={() => setShowForm(true)}
         className="fixed bottom-8 right-6 w-14 h-14 bg-[#f2cc0d] hover:bg-yellow-500 text-black rounded-full shadow-[0_0_20px_rgba(242,204,13,0.4)] flex items-center justify-center active:scale-95 transition-all z-50"
@@ -390,6 +403,32 @@ export default function App() {
           />
         </svg>
       </button>
+
+      {/* MODAL CUSTOMIZADO (POPUP) */}
+      {modalConfig && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity">
+          <div className="bg-[#1e1e1e] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-[fadeIn_0.2s_ease-out]">
+            <h3 className="text-xl font-extrabold text-white mb-2">
+              {modalConfig.title}
+            </h3>
+            <p className="text-sm text-zinc-400 mb-6">{modalConfig.message}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setModalConfig(null)}
+                className="flex-1 py-3 rounded-xl font-bold text-zinc-300 bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={modalConfig.onConfirm}
+                className={`flex-1 py-3 rounded-xl font-extrabold transition-colors ${modalConfig.actionClass}`}
+              >
+                {modalConfig.actionLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
