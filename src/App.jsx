@@ -21,7 +21,6 @@ export default function App() {
     carregarApostas();
   }, []);
 
-  // Agrupando apostas por categoria
   const apostasPorCategoria = apostas.reduce((acc, aposta) => {
     if (!acc[aposta.categoria]) {
       acc[aposta.categoria] = {
@@ -31,16 +30,13 @@ export default function App() {
       };
     }
     acc[aposta.categoria].palpites.push(aposta);
-    if (aposta.vencedor_real) {
+    if (aposta.vencedor_real)
       acc[aposta.categoria].vencedor_real = aposta.vencedor_real;
-    }
     return acc;
   }, {});
 
-  // Extrai uma lista única de todos os nomes que apostaram
   const apostadores = [...new Set(apostas.map((a) => a.apostador))];
 
-  // Função do Mesário para gravar o vencedor
   const definirVencedor = async (categoria, indicadoVencedor) => {
     if (!indicadoVencedor) return;
     setLoadingWinner(true);
@@ -51,12 +47,17 @@ export default function App() {
       .eq("categoria", categoria);
 
     setLoadingWinner(false);
+    if (!error) carregarApostas();
+  };
 
-    if (error) {
-      alert("Erro ao salvar o vencedor.");
-    } else {
-      carregarApostas();
-    }
+  // Nova função para apagar aposta
+  const deletarAposta = async (id) => {
+    if (!window.confirm("Certeza que deseja apagar essa aposta?")) return;
+    const { error } = await supabase
+      .from("apostas_oscar")
+      .delete()
+      .eq("id", id);
+    if (!error) carregarApostas();
   };
 
   if (showForm) {
@@ -69,12 +70,12 @@ export default function App() {
   }
 
   return (
-    <div className="bg-background-dark text-slate-100 min-h-screen pb-24 font-display">
-      {/* HEADER DINÂMICO - Aceita N pessoas */}
+    <div className="bg-background-dark text-slate-100 min-h-[100dvh] pb-28 font-display">
       <header className="sticky top-0 z-50 border-b border-white/10 backdrop-blur-md bg-background-dark/90 px-4 py-4">
         <div className="max-w-md mx-auto flex flex-col">
-          <span className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">
-            TOTAL APOSTADO
+          <span className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+            Placar Ao Vivo
           </span>
 
           <div className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide">
@@ -84,9 +85,16 @@ export default function App() {
               </span>
             ) : (
               apostadores.map((nome, index) => {
-                // Calcula quanto essa pessoa apostou no total
-                const totalApostado = apostas
-                  .filter((a) => a.apostador === nome)
+                // Matemática atualizada para o formato Ganha/Perde
+                const ganhos = apostas
+                  .filter((a) => a.apostador === nome && a.vencedor_real)
+                  .filter((a) => {
+                    const acertouGanha =
+                      a.tipo !== "perde" && a.indicado === a.vencedor_real;
+                    const acertouPerde =
+                      a.tipo === "perde" && a.indicado !== a.vencedor_real;
+                    return acertouGanha || acertouPerde;
+                  })
                   .reduce((sum, a) => sum + Number(a.valor), 0);
 
                 return (
@@ -96,10 +104,9 @@ export default function App() {
                         {nome}
                       </span>
                       <span className="text-primary font-bold text-lg">
-                        R$ {totalApostado.toFixed(2)}
+                        R$ {ganhos.toFixed(2)}
                       </span>
                     </div>
-                    {/* Linha separadora entre os nomes */}
                     {index < apostadores.length - 1 && (
                       <div className="h-8 w-[1px] bg-white/10"></div>
                     )}
@@ -111,7 +118,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* LISTA DE CARDS */}
       <main className="max-w-md mx-auto px-4 py-6 space-y-4">
         {Object.entries(apostasPorCategoria).map(([categoria, dados]) => {
           const isFinalizado = !!dados.vencedor_real;
@@ -139,15 +145,25 @@ export default function App() {
                 </span>
               </div>
 
-              {/* Lista de Palpites Feitos */}
               <div className="space-y-3 mb-4">
                 {dados.palpites.map((palpite) => {
                   let bgClass = "bg-white/5 border-white/10";
                   let textClass = "text-slate-400";
                   let icon = "";
 
+                  // Lógica visual baseada em ganhar/perder
+                  const apostouPerde = palpite.tipo === "perde";
+                  const indicacao = apostouPerde
+                    ? `(APOSTOU QUE PERDE) ${palpite.indicado}`
+                    : palpite.indicado;
+
                   if (isFinalizado) {
-                    if (palpite.indicado === dados.vencedor_real) {
+                    const acertouGanha =
+                      !apostouPerde && palpite.indicado === dados.vencedor_real;
+                    const acertouPerde =
+                      apostouPerde && palpite.indicado !== dados.vencedor_real;
+
+                    if (acertouGanha || acertouPerde) {
                       bgClass = "bg-green-500/10 border-green-500/30";
                       textClass = "text-green-400 font-bold";
                       icon = "✓";
@@ -156,29 +172,55 @@ export default function App() {
                       textClass = "text-red-400";
                       icon = "✗";
                     }
+                  } else if (apostouPerde) {
+                    // Destaca em laranja antes de finalizar pra saber que é uma aposta "do contra"
+                    bgClass = "bg-orange-500/10 border-orange-500/20";
+                    textClass = "text-orange-400";
                   }
 
                   return (
                     <div
                       key={palpite.id}
-                      className={`flex justify-between items-center p-2 rounded-xl border ${bgClass} transition-all`}
+                      className={`flex justify-between items-center p-2 rounded-xl border ${bgClass} transition-all relative group`}
                     >
+                      <div className="flex items-center gap-2">
+                        {/* Botão de deletar - Fica visível sempre (ou você pode colocar no lugar do ícone) */}
+                        {!isFinalizado && (
+                          <button
+                            onClick={() => deletarAposta(palpite.id)}
+                            className="text-slate-600 hover:text-red-400 p-1"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </button>
+                        )}
+                        <span
+                          className={`text-xs uppercase tracking-tighter ${textClass}`}
+                        >
+                          {palpite.apostador} {icon}
+                        </span>
+                      </div>
                       <span
-                        className={`text-xs uppercase tracking-tighter ${textClass}`}
+                        className={`text-sm font-bold text-right pl-2 ${isFinalizado && (textClass.includes("green") || textClass.includes("red")) ? textClass : "text-white"}`}
                       >
-                        {palpite.apostador} {icon}
-                      </span>
-                      <span
-                        className={`text-sm font-bold ${isFinalizado && palpite.indicado === dados.vencedor_real ? "text-green-400" : "text-white"}`}
-                      >
-                        {palpite.indicado}
+                        {indicacao}
                       </span>
                     </div>
                   );
                 })}
               </div>
 
-              {/* ÁREA DO MESÁRIO */}
               <div className="pt-4 border-t border-white/10">
                 {!isFinalizado ? (
                   <div className="flex flex-col gap-2">
@@ -231,12 +273,24 @@ export default function App() {
         })}
       </main>
 
-      {/* FAB: Nova Aposta */}
+      {/* FAB Arrumado - Usando SVG centralizado */}
       <button
         onClick={() => setShowForm(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-primary text-black rounded-full shadow-[0_0_20px_rgba(242,204,13,0.4)] flex items-center justify-center active:scale-95 transition-transform"
+        className="fixed bottom-8 right-6 w-14 h-14 bg-primary text-black rounded-full shadow-[0_0_20px_rgba(242,204,13,0.4)] flex items-center justify-center active:scale-95 transition-transform z-50"
       >
-        <span className="material-symbols-outlined text-3xl font-bold">+</span>
+        <svg
+          className="w-8 h-8"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="3"
+            d="M12 4v16m8-8H4"
+          />
+        </svg>
       </button>
     </div>
   );
