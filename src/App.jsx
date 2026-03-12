@@ -7,7 +7,6 @@ export default function App() {
   const [apostas, setApostas] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [loadingWinner, setLoadingWinner] = useState(false);
-
   const [modalConfig, setModalConfig] = useState(null);
 
   const carregarApostas = async () => {
@@ -37,7 +36,6 @@ export default function App() {
     return acc;
   }, {});
 
-  // PLACAR ATUALIZADO: Agora conta Acertos e Erros
   const placar = apostas.reduce((acc, aposta) => {
     const nomeNormalizado = aposta.apostador.trim().toUpperCase();
 
@@ -45,8 +43,8 @@ export default function App() {
       acc[nomeNormalizado] = {
         nomeExibicao: aposta.apostador.trim(),
         ganhos: 0,
-        acertos: 0, // Novo contador
-        erros: 0, // Novo contador
+        acertos: 0,
+        erros: 0,
       };
     }
 
@@ -59,9 +57,9 @@ export default function App() {
 
       if (acertouGanha || acertouPerde) {
         acc[nomeNormalizado].ganhos += Number(aposta.valor);
-        acc[nomeNormalizado].acertos += 1; // Soma acerto
+        acc[nomeNormalizado].acertos += 1;
       } else {
-        acc[nomeNormalizado].erros += 1; // Soma erro
+        acc[nomeNormalizado].erros += 1;
       }
     }
 
@@ -73,12 +71,10 @@ export default function App() {
   const definirVencedor = async (categoria, indicadoVencedor) => {
     if (!indicadoVencedor) return;
     setLoadingWinner(true);
-
     const { error } = await supabase
       .from("apostas_oscar")
       .update({ vencedor_real: indicadoVencedor })
       .eq("categoria", categoria);
-
     setLoadingWinner(false);
     if (!error) carregarApostas();
   };
@@ -158,8 +154,6 @@ export default function App() {
                     <span className="text-[#f2cc0d] font-extrabold text-lg leading-tight">
                       R$ {pessoa.ganhos.toFixed(2)}
                     </span>
-
-                    {/* Linha de Acertos e Erros */}
                     <div className="flex items-center gap-1.5 mt-0.5 text-[9px] font-bold tracking-wider">
                       <span className="text-green-500">{pessoa.acertos} ✓</span>
                       <span className="text-zinc-700">|</span>
@@ -181,30 +175,94 @@ export default function App() {
         {Object.entries(apostasPorCategoria).map(([categoria, dados]) => {
           const isFinalizado = !!dados.vencedor_real;
 
+          // Lógica para detectar Empate Técnico
+          let isEmpate = false;
+          if (isFinalizado && apostadores.length > 1) {
+            const ganhosNestaCategoria = {};
+            // Inicializa todo mundo com R$ 0 (caso não tenham apostado)
+            apostadores.forEach(
+              (p) => (ganhosNestaCategoria[p.nomeExibicao.toUpperCase()] = 0),
+            );
+
+            dados.palpites.forEach((palpite) => {
+              const apostouPerde = palpite.tipo === "perde";
+              const acertou =
+                (!apostouPerde && palpite.indicado === dados.vencedor_real) ||
+                (apostouPerde && palpite.indicado !== dados.vencedor_real);
+              if (acertou) {
+                const nomeNormalizado = palpite.apostador.trim().toUpperCase();
+                if (ganhosNestaCategoria[nomeNormalizado] !== undefined) {
+                  ganhosNestaCategoria[nomeNormalizado] += dados.valor;
+                }
+              }
+            });
+
+            // Se a lista de ganhos únicos tiver apenas 1 valor (ex: todo mundo ganhou R$ 10 ou R$ 0), é empate.
+            const valoresUnicos = [
+              ...new Set(Object.values(ganhosNestaCategoria)),
+            ];
+            if (valoresUnicos.length === 1) {
+              isEmpate = true;
+            }
+          }
+
           return (
             <article
               key={categoria}
               className={`bg-[#1e1e1e] rounded-2xl overflow-hidden shadow-2xl border transition-colors ${isFinalizado ? "border-[#f2cc0d]/30" : "border-white/5"}`}
             >
+              {/* HEADER DO CARD (Ajustado para caber o Dropdown de Empate) */}
               <header className="p-4 border-b border-white/5">
-                <div className="flex flex-col gap-1">
-                  <h2 className="text-xl font-extrabold tracking-tight text-white leading-tight">
-                    {categoria}
-                  </h2>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span
-                      className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded tracking-widest border ${isFinalizado ? "bg-[#f2cc0d]/20 text-[#f2cc0d] border-[#f2cc0d]/30" : "bg-zinc-800 text-zinc-400 border-zinc-700"}`}
-                    >
-                      {isFinalizado ? "Finalizado" : "Pendente"}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[#f2cc0d] text-[11px] font-semibold uppercase tracking-wider">
-                        Valor em Jogo:
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="text-xl font-extrabold tracking-tight text-white leading-tight">
+                      {categoria}
+                    </h2>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[#f2cc0d] text-[10px] font-semibold uppercase tracking-wider">
+                        Valor:
                       </span>
-                      <span className="text-[#f2cc0d] text-[11px] font-extrabold">
+                      <span className="text-[#f2cc0d] text-[12px] font-extrabold">
                         R$ {dados.valor.toFixed(2)}
                       </span>
                     </div>
+                  </div>
+
+                  {/* Área das Pílulas (Pendente / Finalizado / Empate) */}
+                  <div className="flex flex-col items-start w-full">
+                    {!isFinalizado ? (
+                      <span className="px-2 py-0.5 text-[9px] font-bold uppercase rounded tracking-widest border bg-zinc-800 text-zinc-400 border-zinc-700">
+                        Pendente
+                      </span>
+                    ) : isEmpate ? (
+                      <details className="group w-full">
+                        <summary className="cursor-pointer list-none inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase rounded tracking-widest border bg-slate-500/20 text-slate-300 border-slate-500/40 select-none transition-colors hover:bg-slate-500/30">
+                          Empate Técnico
+                          <svg
+                            className="w-3 h-3 transition-transform group-open:rotate-180"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M19 9l-7 7-7-7"
+                            />
+                          </svg>
+                        </summary>
+                        <div className="mt-2 p-3 bg-black/20 border border-white/5 rounded-xl text-zinc-400 text-xs leading-relaxed animate-[fadeIn_0.2s_ease-out]">
+                          Vocês tiveram o mesmo resultado de ganhos ou erros
+                          nesta categoria. Os pontos se anularam e ninguém
+                          ganhou vantagem financeira no placar.
+                        </div>
+                      </details>
+                    ) : (
+                      <span className="px-2 py-0.5 text-[9px] font-bold uppercase rounded tracking-widest border bg-[#f2cc0d]/20 text-[#f2cc0d] border-[#f2cc0d]/30">
+                        Finalizado
+                      </span>
+                    )}
                   </div>
                 </div>
               </header>
