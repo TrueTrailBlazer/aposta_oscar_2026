@@ -21,6 +21,7 @@ export default function App() {
     carregarApostas();
   }, []);
 
+  // Agrupando apostas por categoria
   const apostasPorCategoria = apostas.reduce((acc, aposta) => {
     if (!acc[aposta.categoria]) {
       acc[aposta.categoria] = {
@@ -35,8 +36,37 @@ export default function App() {
     return acc;
   }, {});
 
-  const apostadores = [...new Set(apostas.map((a) => a.apostador))];
+  // Lógica inteligente do Placar Ao Vivo (Agrupa nomes iguais e soma os ganhos)
+  const placar = apostas.reduce((acc, aposta) => {
+    // Normaliza o nome para não duplicar (ex: "Luís " vira "LUÍS")
+    const nomeNormalizado = aposta.apostador.trim().toUpperCase();
 
+    if (!acc[nomeNormalizado]) {
+      acc[nomeNormalizado] = {
+        nomeExibicao: aposta.apostador.trim(), // Guarda como a pessoa digitou para mostrar bonito
+        ganhos: 0,
+      };
+    }
+
+    // Calcula os ganhos só das categorias finalizadas
+    if (aposta.vencedor_real) {
+      const apostouPerde = aposta.tipo === "perde";
+      const acertouGanha =
+        !apostouPerde && aposta.indicado === aposta.vencedor_real;
+      const acertouPerde =
+        apostouPerde && aposta.indicado !== aposta.vencedor_real;
+
+      if (acertouGanha || acertouPerde) {
+        acc[nomeNormalizado].ganhos += Number(aposta.valor);
+      }
+    }
+
+    return acc;
+  }, {});
+
+  const apostadores = Object.values(placar);
+
+  // Função do Mesário
   const definirVencedor = async (categoria, indicadoVencedor) => {
     if (!indicadoVencedor) return;
     setLoadingWinner(true);
@@ -50,7 +80,6 @@ export default function App() {
     if (!error) carregarApostas();
   };
 
-  // Nova função para apagar aposta
   const deletarAposta = async (id) => {
     if (!window.confirm("Certeza que deseja apagar essa aposta?")) return;
     const { error } = await supabase
@@ -71,53 +100,44 @@ export default function App() {
 
   return (
     <div className="bg-background-dark text-slate-100 min-h-[100dvh] pb-28 font-display">
+      {/* HEADER DINÂMICO - PLACAR */}
       <header className="sticky top-0 z-50 border-b border-white/10 backdrop-blur-md bg-background-dark/90 px-4 py-4">
         <div className="max-w-md mx-auto flex flex-col">
           <span className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-            Placar Ao Vivo
+            Placar Ao Vivo (Ganhos)
           </span>
 
           <div className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide">
             {apostadores.length === 0 ? (
               <span className="text-sm text-slate-500">
-                Faça a primeira aposta...
+                Aguardando resultados...
               </span>
             ) : (
-              apostadores.map((nome, index) => {
-                // Matemática atualizada para o formato Ganha/Perde
-                const ganhos = apostas
-                  .filter((a) => a.apostador === nome && a.vencedor_real)
-                  .filter((a) => {
-                    const acertouGanha =
-                      a.tipo !== "perde" && a.indicado === a.vencedor_real;
-                    const acertouPerde =
-                      a.tipo === "perde" && a.indicado !== a.vencedor_real;
-                    return acertouGanha || acertouPerde;
-                  })
-                  .reduce((sum, a) => sum + Number(a.valor), 0);
-
-                return (
-                  <div key={nome} className="flex items-center gap-4 shrink-0">
-                    <div className="flex flex-col">
-                      <span className="text-xs text-slate-400 truncate max-w-[80px]">
-                        {nome}
-                      </span>
-                      <span className="text-primary font-bold text-lg">
-                        R$ {ganhos.toFixed(2)}
-                      </span>
-                    </div>
-                    {index < apostadores.length - 1 && (
-                      <div className="h-8 w-[1px] bg-white/10"></div>
-                    )}
+              apostadores.map((pessoa, index) => (
+                <div
+                  key={pessoa.nomeExibicao}
+                  className="flex items-center gap-4 shrink-0"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-xs text-slate-400 truncate max-w-[80px]">
+                      {pessoa.nomeExibicao}
+                    </span>
+                    <span className="text-primary font-bold text-lg">
+                      R$ {pessoa.ganhos.toFixed(2)}
+                    </span>
                   </div>
-                );
-              })
+                  {index < apostadores.length - 1 && (
+                    <div className="h-8 w-[1px] bg-white/10"></div>
+                  )}
+                </div>
+              ))
             )}
           </div>
         </div>
       </header>
 
+      {/* CARDS DE APOSTAS */}
       <main className="max-w-md mx-auto px-4 py-6 space-y-4">
         {Object.entries(apostasPorCategoria).map(([categoria, dados]) => {
           const isFinalizado = !!dados.vencedor_real;
@@ -145,18 +165,16 @@ export default function App() {
                 </span>
               </div>
 
+              {/* LISTA DE PALPITES FORMATADA */}
               <div className="space-y-3 mb-4">
                 {dados.palpites.map((palpite) => {
                   let bgClass = "bg-white/5 border-white/10";
                   let textClass = "text-slate-400";
                   let icon = "";
 
-                  // Lógica visual baseada em ganhar/perder
                   const apostouPerde = palpite.tipo === "perde";
-                  const indicacao = apostouPerde
-                    ? `(APOSTOU QUE PERDE) ${palpite.indicado}`
-                    : palpite.indicado;
 
+                  // Lógica visual pós-resultado
                   if (isFinalizado) {
                     const acertouGanha =
                       !apostouPerde && palpite.indicado === dados.vencedor_real;
@@ -172,60 +190,68 @@ export default function App() {
                       textClass = "text-red-400";
                       icon = "✗";
                     }
-                  } else if (apostouPerde) {
-                    // Destaca em laranja antes de finalizar pra saber que é uma aposta "do contra"
-                    bgClass = "bg-orange-500/10 border-orange-500/20";
-                    textClass = "text-orange-400";
                   }
 
                   return (
                     <div
                       key={palpite.id}
-                      className={`flex justify-between items-center p-2 rounded-xl border ${bgClass} transition-all relative group`}
+                      className={`flex flex-col p-3 rounded-xl border ${bgClass} transition-all relative group gap-2`}
                     >
-                      <div className="flex items-center gap-2">
-                        {/* Botão de deletar - Fica visível sempre (ou você pode colocar no lugar do ícone) */}
-                        {!isFinalizado && (
-                          <button
-                            onClick={() => deletarAposta(palpite.id)}
-                            className="text-slate-600 hover:text-red-400 p-1"
-                          >
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
+                      {/* Linha Superior: Nome + Badge */}
+                      <div className="flex justify-between items-center w-full">
+                        <div className="flex items-center gap-2">
+                          {!isFinalizado && (
+                            <button
+                              onClick={() => deletarAposta(palpite.id)}
+                              className="text-slate-600 hover:text-red-400 p-1"
                             >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                              />
-                            </svg>
-                          </button>
-                        )}
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                            </button>
+                          )}
+                          <span
+                            className={`text-xs uppercase tracking-widest ${textClass}`}
+                          >
+                            {palpite.apostador} {icon}
+                          </span>
+                        </div>
+
+                        {/* Etiqueta Visual de Ganha/Perde */}
                         <span
-                          className={`text-xs uppercase tracking-tighter ${textClass}`}
+                          className={`text-[9px] px-2 py-0.5 rounded uppercase font-bold tracking-wider ${apostouPerde ? "bg-orange-500/10 text-orange-400 border border-orange-500/20" : "bg-blue-500/10 text-blue-400 border border-blue-500/20"}`}
                         >
-                          {palpite.apostador} {icon}
+                          Apostou que {apostouPerde ? "Perde" : "Ganha"}
                         </span>
                       </div>
+
+                      {/* Linha Inferior: Indicado */}
                       <span
-                        className={`text-sm font-bold text-right pl-2 ${isFinalizado && (textClass.includes("green") || textClass.includes("red")) ? textClass : "text-white"}`}
+                        className={`text-sm font-bold pl-1 ${isFinalizado && (textClass.includes("green") || textClass.includes("red")) ? textClass : "text-white"}`}
                       >
-                        {indicacao}
+                        {palpite.indicado}
                       </span>
                     </div>
                   );
                 })}
               </div>
 
+              {/* ÁREA DO MESÁRIO */}
               <div className="pt-4 border-t border-white/10">
                 {!isFinalizado ? (
                   <div className="flex flex-col gap-2">
                     <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-                      Mesário: Vencedor
+                      Mesário: Vencedor Oficial
                     </span>
                     <div className="flex gap-2">
                       <select
@@ -234,7 +260,7 @@ export default function App() {
                         defaultValue=""
                       >
                         <option value="" disabled>
-                          Quem ganhou?
+                          Quem levou?
                         </option>
                         {categoriasOscar[categoria]?.indicados.map((ind) => (
                           <option key={ind} value={ind}>
@@ -273,7 +299,6 @@ export default function App() {
         })}
       </main>
 
-      {/* FAB Arrumado - Usando SVG centralizado */}
       <button
         onClick={() => setShowForm(true)}
         className="fixed bottom-8 right-6 w-14 h-14 bg-primary text-black rounded-full shadow-[0_0_20px_rgba(242,204,13,0.4)] flex items-center justify-center active:scale-95 transition-transform z-50"
