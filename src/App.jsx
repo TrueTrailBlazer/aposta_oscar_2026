@@ -8,7 +8,7 @@ export default function App() {
   const [showForm, setShowForm] = useState(false);
   const [loadingWinner, setLoadingWinner] = useState(false);
 
-  // Estado para controlar o nosso Popup customizado
+  // Estado para controlar o Modal de confirmação customizado
   const [modalConfig, setModalConfig] = useState(null);
 
   const carregarApostas = async () => {
@@ -79,7 +79,7 @@ export default function App() {
     if (!error) carregarApostas();
   };
 
-  // Funções que chamam o Popup Customizado
+  // Funções que chamam o Modal Customizado
   const abrirModalDesfazer = (categoria) => {
     setModalConfig({
       title: "Editar Resultado",
@@ -245,53 +245,56 @@ export default function App() {
                   return (
                     <div
                       key={palpite.id}
-                      className={`p-4 rounded-xl border flex flex-col gap-1 transition-all ${containerClass}`}
+                      className={`p-4 rounded-xl border flex flex-col gap-1 transition-all relative ${containerClass}`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`text-xs font-bold uppercase tracking-wide ${nameClass}`}
+                      {/* Canto superior direito: Tag + Lixeira */}
+                      <div className="absolute top-4 right-4 flex items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 text-[8px] font-black uppercase rounded-full border tracking-tighter shrink-0 ${apostouPerde ? "bg-orange-500/10 text-orange-400 border-orange-500/20" : "bg-blue-500/10 text-blue-400 border-blue-500/20"}`}
+                        >
+                          Apostou que {apostouPerde ? "perde" : "ganha"}
+                        </span>
+                        {!isFinalizado && (
+                          <button
+                            onClick={() => abrirModalDeletar(palpite.id)}
+                            className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-full"
+                            title="Apagar Palpite"
                           >
-                            {palpite.apostador}
-                          </span>
-                          {icon}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`px-2 py-0.5 text-[8px] font-black uppercase rounded-full border tracking-tighter ${apostouPerde ? "bg-orange-500/10 text-orange-400 border-orange-500/20" : "bg-blue-500/10 text-blue-400 border-blue-500/20"}`}
-                          >
-                            Apostou que {apostouPerde ? "perde" : "ganha"}
-                          </span>
-
-                          {/* A lixeira com o estilo igual ao do Stitch (redondinha) */}
-                          {!isFinalizado && (
-                            <button
-                              onClick={() => abrirModalDeletar(palpite.id)}
-                              className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-full"
-                              title="Apagar Palpite"
+                            <svg
+                              fill="none"
+                              height="12"
+                              stroke="currentColor"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              viewBox="0 0 24 24"
+                              width="12"
+                              xmlns="http://www.w3.org/2000/svg"
                             >
-                              <svg
-                                fill="none"
-                                height="14"
-                                stroke="currentColor"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                viewBox="0 0 24 24"
-                                width="14"
-                                xmlns="http://www.w3.org/2000/svg"
-                              >
-                                <path d="M3 6h18"></path>
-                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                              </svg>
-                            </button>
-                          )}
-                        </div>
+                              <path d="M3 6h18"></path>
+                              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                            </svg>
+                          </button>
+                        )}
                       </div>
 
-                      <p className={`text-base font-bold ${movieClass}`}>
+                      {/* Nome e Ícone */}
+                      <div className="flex items-center gap-1.5 min-w-0 pr-[110px]">
+                        {" "}
+                        {/* pr- pág o espaço da tag+lixeira */}
+                        <span
+                          className={`text-xs font-bold uppercase tracking-wide truncate ${nameClass}`}
+                        >
+                          {palpite.apostador}
+                        </span>
+                        {icon}
+                      </div>
+
+                      {/* Filme */}
+                      <p
+                        className={`text-base font-bold pr-[110px] ${movieClass}`}
+                      >
                         {palpite.indicado}
                       </p>
                     </div>
@@ -356,7 +359,7 @@ export default function App() {
                         {dados.vencedor_real}
                       </span>
                     </div>
-                    {/* Botão Lápis com a cor oficial */}
+                    {/* Botão de Editar Resultado: Ícone de Lápis */}
                     <button
                       onClick={() => abrirModalDesfazer(categoria)}
                       disabled={loadingWinner}
@@ -385,6 +388,7 @@ export default function App() {
         })}
       </main>
 
+      {/* FAB: NOVA APOSTA */}
       <button
         onClick={() => setShowForm(true)}
         className="fixed bottom-8 right-6 w-14 h-14 bg-[#f2cc0d] hover:bg-yellow-500 text-black rounded-full shadow-[0_0_20px_rgba(242,204,13,0.4)] flex items-center justify-center active:scale-95 transition-all z-50"
