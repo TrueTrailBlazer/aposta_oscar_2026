@@ -22,6 +22,7 @@ export default function App() {
     carregarApostas();
   }, []);
 
+  // 1. Agrupa apostas por categoria
   const apostasPorCategoria = apostas.reduce((acc, aposta) => {
     if (!acc[aposta.categoria]) {
       acc[aposta.categoria] = {
@@ -36,37 +37,64 @@ export default function App() {
     return acc;
   }, {});
 
-  const placar = apostas.reduce((acc, aposta) => {
-    const nomeNormalizado = aposta.apostador.trim().toUpperCase();
+  // 2. PLACAR COM REGRA DE RACHAR O PRÊMIO (Split Pot)
+  const placarObj = {};
 
-    if (!acc[nomeNormalizado]) {
-      acc[nomeNormalizado] = {
+  // Primeiro, cadastra todo mundo no placar com zero
+  apostas.forEach((aposta) => {
+    const nomeNormalizado = aposta.apostador.trim().toUpperCase();
+    if (!placarObj[nomeNormalizado]) {
+      placarObj[nomeNormalizado] = {
         nomeExibicao: aposta.apostador.trim(),
         ganhos: 0,
         acertos: 0,
         erros: 0,
       };
     }
+  });
 
-    if (aposta.vencedor_real) {
-      const apostouPerde = aposta.tipo === "perde";
-      const acertouGanha =
-        !apostouPerde && aposta.indicado === aposta.vencedor_real;
-      const acertouPerde =
-        apostouPerde && aposta.indicado !== aposta.vencedor_real;
+  // Segundo, varre categoria por categoria calculando os vencedores e rachando o prêmio
+  Object.values(apostasPorCategoria).forEach((dados) => {
+    if (dados.vencedor_real) {
+      const ganhadoresNestaCategoria = new Set();
+      const perdedoresNestaCategoria = new Set();
 
-      if (acertouGanha || acertouPerde) {
-        acc[nomeNormalizado].ganhos += Number(aposta.valor);
-        acc[nomeNormalizado].acertos += 1;
-      } else {
-        acc[nomeNormalizado].erros += 1;
+      // Separa quem acertou e quem errou
+      dados.palpites.forEach((palpite) => {
+        const nomeNormalizado = palpite.apostador.trim().toUpperCase();
+        const apostouPerde = palpite.tipo === "perde";
+        const acertou =
+          (!apostouPerde && palpite.indicado === dados.vencedor_real) ||
+          (apostouPerde && palpite.indicado !== dados.vencedor_real);
+
+        if (acertou) {
+          ganhadoresNestaCategoria.add(nomeNormalizado);
+        } else {
+          perdedoresNestaCategoria.add(nomeNormalizado);
+        }
+      });
+
+      const numGanhadores = ganhadoresNestaCategoria.size;
+
+      // Se teve ganhador, divide o valor da categoria pelo número de pessoas que acertaram
+      if (numGanhadores > 0) {
+        const premioDividido = dados.valor / numGanhadores;
+        ganhadoresNestaCategoria.forEach((nome) => {
+          placarObj[nome].ganhos += premioDividido;
+          placarObj[nome].acertos += 1;
+        });
       }
+
+      // Adiciona o erro pra quem não acertou
+      perdedoresNestaCategoria.forEach((nome) => {
+        if (!ganhadoresNestaCategoria.has(nome)) {
+          placarObj[nome].erros += 1;
+        }
+      });
     }
+  });
 
-    return acc;
-  }, {});
-
-  const apostadores = Object.values(placar);
+  const apostadores = Object.values(placarObj);
 
   const definirVencedor = async (categoria, indicadoVencedor) => {
     if (!indicadoVencedor) return;
@@ -175,33 +203,27 @@ export default function App() {
         {Object.entries(apostasPorCategoria).map(([categoria, dados]) => {
           const isFinalizado = !!dados.vencedor_real;
 
-          // Lógica para detectar Empate Técnico
+          // Lógica para detectar se racharam o prêmio ou erraram juntos
           let isEmpate = false;
-          if (isFinalizado && apostadores.length > 1) {
-            const ganhosNestaCategoria = {};
-            // Inicializa todo mundo com R$ 0 (caso não tenham apostado)
-            apostadores.forEach(
-              (p) => (ganhosNestaCategoria[p.nomeExibicao.toUpperCase()] = 0),
-            );
+          let ganhouRachado = false;
 
-            dados.palpites.forEach((palpite) => {
-              const apostouPerde = palpite.tipo === "perde";
-              const acertou =
-                (!apostouPerde && palpite.indicado === dados.vencedor_real) ||
-                (apostouPerde && palpite.indicado !== dados.vencedor_real);
-              if (acertou) {
-                const nomeNormalizado = palpite.apostador.trim().toUpperCase();
-                if (ganhosNestaCategoria[nomeNormalizado] !== undefined) {
-                  ganhosNestaCategoria[nomeNormalizado] += dados.valor;
-                }
+          if (isFinalizado && dados.palpites.length > 1) {
+            let acertosNestaCat = 0;
+            dados.palpites.forEach((p) => {
+              const apostouPerde = p.tipo === "perde";
+              if (
+                (!apostouPerde && p.indicado === dados.vencedor_real) ||
+                (apostouPerde && p.indicado !== dados.vencedor_real)
+              ) {
+                acertosNestaCat++;
               }
             });
 
-            // Se a lista de ganhos únicos tiver apenas 1 valor (ex: todo mundo ganhou R$ 10 ou R$ 0), é empate.
-            const valoresUnicos = [
-              ...new Set(Object.values(ganhosNestaCategoria)),
-            ];
-            if (valoresUnicos.length === 1) {
+            if (acertosNestaCat > 1) {
+              isEmpate = true;
+              ganhouRachado = true;
+            } else if (acertosNestaCat === 0) {
+              // Todo mundo errou
               isEmpate = true;
             }
           }
@@ -211,7 +233,6 @@ export default function App() {
               key={categoria}
               className={`bg-[#1e1e1e] rounded-2xl overflow-hidden shadow-2xl border transition-colors ${isFinalizado ? "border-[#f2cc0d]/30" : "border-white/5"}`}
             >
-              {/* HEADER DO CARD (Ajustado para caber o Dropdown de Empate) */}
               <header className="p-4 border-b border-white/5">
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between gap-2">
@@ -228,7 +249,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Área das Pílulas (Pendente / Finalizado / Empate) */}
                   <div className="flex flex-col items-start w-full">
                     {!isFinalizado ? (
                       <span className="px-2 py-0.5 text-[9px] font-bold uppercase rounded tracking-widest border bg-zinc-800 text-zinc-400 border-zinc-700">
@@ -253,9 +273,9 @@ export default function App() {
                           </svg>
                         </summary>
                         <div className="mt-2 p-3 bg-black/20 border border-white/5 rounded-xl text-zinc-400 text-xs leading-relaxed animate-[fadeIn_0.2s_ease-out]">
-                          Vocês tiveram o mesmo resultado de ganhos ou erros
-                          nesta categoria. Os pontos se anularam e ninguém
-                          ganhou vantagem financeira no placar.
+                          {ganhouRachado
+                            ? `Vocês acertaram a aposta juntos e racharam o valor da categoria. Cada um levou R$ ${(dados.valor / 2).toFixed(2)}.`
+                            : "Todo mundo errou! Os palpites se anularam e o dinheiro ficou na mesa."}
                         </div>
                       </details>
                     ) : (
