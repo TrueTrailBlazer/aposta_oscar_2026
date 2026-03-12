@@ -8,7 +8,6 @@ export default function App() {
   const [showForm, setShowForm] = useState(false);
   const [loadingWinner, setLoadingWinner] = useState(false);
 
-  // Estado para controlar o Modal de confirmação customizado
   const [modalConfig, setModalConfig] = useState(null);
 
   const carregarApostas = async () => {
@@ -38,6 +37,7 @@ export default function App() {
     return acc;
   }, {});
 
+  // PLACAR ATUALIZADO: Agora conta Acertos e Erros
   const placar = apostas.reduce((acc, aposta) => {
     const nomeNormalizado = aposta.apostador.trim().toUpperCase();
 
@@ -45,6 +45,8 @@ export default function App() {
       acc[nomeNormalizado] = {
         nomeExibicao: aposta.apostador.trim(),
         ganhos: 0,
+        acertos: 0, // Novo contador
+        erros: 0, // Novo contador
       };
     }
 
@@ -57,6 +59,9 @@ export default function App() {
 
       if (acertouGanha || acertouPerde) {
         acc[nomeNormalizado].ganhos += Number(aposta.valor);
+        acc[nomeNormalizado].acertos += 1; // Soma acerto
+      } else {
+        acc[nomeNormalizado].erros += 1; // Soma erro
       }
     }
 
@@ -65,7 +70,6 @@ export default function App() {
 
   const apostadores = Object.values(placar);
 
-  // MESÁRIO: Cravar Vencedor
   const definirVencedor = async (categoria, indicadoVencedor) => {
     if (!indicadoVencedor) return;
     setLoadingWinner(true);
@@ -79,7 +83,6 @@ export default function App() {
     if (!error) carregarApostas();
   };
 
-  // Funções que chamam o Modal Customizado
   const abrirModalDesfazer = (categoria) => {
     setModalConfig({
       title: "Editar Resultado",
@@ -134,7 +137,7 @@ export default function App() {
         <div className="max-w-md mx-auto flex flex-col">
           <span className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold mb-2 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-            Placar Ao Vivo (Ganhos)
+            Placar Ao Vivo
           </span>
 
           <div className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide">
@@ -152,12 +155,19 @@ export default function App() {
                     <span className="text-xs text-zinc-400 font-bold uppercase tracking-wide truncate max-w-[80px]">
                       {pessoa.nomeExibicao}
                     </span>
-                    <span className="text-[#f2cc0d] font-extrabold text-lg">
+                    <span className="text-[#f2cc0d] font-extrabold text-lg leading-tight">
                       R$ {pessoa.ganhos.toFixed(2)}
                     </span>
+
+                    {/* Linha de Acertos e Erros */}
+                    <div className="flex items-center gap-1.5 mt-0.5 text-[9px] font-bold tracking-wider">
+                      <span className="text-green-500">{pessoa.acertos} ✓</span>
+                      <span className="text-zinc-700">|</span>
+                      <span className="text-red-500">{pessoa.erros} ✗</span>
+                    </div>
                   </div>
                   {index < apostadores.length - 1 && (
-                    <div className="h-8 w-[1px] bg-white/5"></div>
+                    <div className="h-10 w-[1px] bg-white/5"></div>
                   )}
                 </div>
               ))
@@ -247,7 +257,6 @@ export default function App() {
                       key={palpite.id}
                       className={`p-4 rounded-xl border flex flex-col gap-1 transition-all relative ${containerClass}`}
                     >
-                      {/* Canto superior direito: Tag + Lixeira */}
                       <div className="absolute top-4 right-4 flex items-center gap-2">
                         <span
                           className={`px-2 py-0.5 text-[8px] font-black uppercase rounded-full border tracking-tighter shrink-0 ${apostouPerde ? "bg-orange-500/10 text-orange-400 border-orange-500/20" : "bg-blue-500/10 text-blue-400 border-blue-500/20"}`}
@@ -262,13 +271,13 @@ export default function App() {
                           >
                             <svg
                               fill="none"
-                              height="12"
+                              height="14"
                               stroke="currentColor"
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               strokeWidth="2"
                               viewBox="0 0 24 24"
-                              width="12"
+                              width="14"
                               xmlns="http://www.w3.org/2000/svg"
                             >
                               <path d="M3 6h18"></path>
@@ -279,10 +288,7 @@ export default function App() {
                         )}
                       </div>
 
-                      {/* Nome e Ícone */}
                       <div className="flex items-center gap-1.5 min-w-0 pr-[110px]">
-                        {" "}
-                        {/* pr- pág o espaço da tag+lixeira */}
                         <span
                           className={`text-xs font-bold uppercase tracking-wide truncate ${nameClass}`}
                         >
@@ -291,7 +297,6 @@ export default function App() {
                         {icon}
                       </div>
 
-                      {/* Filme */}
                       <p
                         className={`text-base font-bold pr-[110px] ${movieClass}`}
                       >
@@ -359,7 +364,6 @@ export default function App() {
                         {dados.vencedor_real}
                       </span>
                     </div>
-                    {/* Botão de Editar Resultado: Ícone de Lápis */}
                     <button
                       onClick={() => abrirModalDesfazer(categoria)}
                       disabled={loadingWinner}
@@ -388,7 +392,6 @@ export default function App() {
         })}
       </main>
 
-      {/* FAB: NOVA APOSTA */}
       <button
         onClick={() => setShowForm(true)}
         className="fixed bottom-8 right-6 w-14 h-14 bg-[#f2cc0d] hover:bg-yellow-500 text-black rounded-full shadow-[0_0_20px_rgba(242,204,13,0.4)] flex items-center justify-center active:scale-95 transition-all z-50"
@@ -408,7 +411,6 @@ export default function App() {
         </svg>
       </button>
 
-      {/* MODAL CUSTOMIZADO (POPUP) */}
       {modalConfig && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity">
           <div className="bg-[#1e1e1e] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-[fadeIn_0.2s_ease-out]">
