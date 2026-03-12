@@ -21,7 +21,6 @@ export default function App() {
     carregarApostas();
   }, []);
 
-  // Agrupando apostas por categoria
   const apostasPorCategoria = apostas.reduce((acc, aposta) => {
     if (!acc[aposta.categoria]) {
       acc[aposta.categoria] = {
@@ -36,19 +35,16 @@ export default function App() {
     return acc;
   }, {});
 
-  // Lógica inteligente do Placar Ao Vivo (Agrupa nomes iguais e soma os ganhos)
   const placar = apostas.reduce((acc, aposta) => {
-    // Normaliza o nome para não duplicar (ex: "Luís " vira "LUÍS")
     const nomeNormalizado = aposta.apostador.trim().toUpperCase();
 
     if (!acc[nomeNormalizado]) {
       acc[nomeNormalizado] = {
-        nomeExibicao: aposta.apostador.trim(), // Guarda como a pessoa digitou para mostrar bonito
+        nomeExibicao: aposta.apostador.trim(),
         ganhos: 0,
       };
     }
 
-    // Calcula os ganhos só das categorias finalizadas
     if (aposta.vencedor_real) {
       const apostouPerde = aposta.tipo === "perde";
       const acertouGanha =
@@ -66,7 +62,7 @@ export default function App() {
 
   const apostadores = Object.values(placar);
 
-  // Função do Mesário
+  // MESÁRIO: Define o vencedor
   const definirVencedor = async (categoria, indicadoVencedor) => {
     if (!indicadoVencedor) return;
     setLoadingWinner(true);
@@ -80,6 +76,26 @@ export default function App() {
     if (!error) carregarApostas();
   };
 
+  // MESÁRIO: Desfaz o resultado (Reseta a categoria para pendente)
+  const desfazerVencedor = async (categoria) => {
+    if (
+      !window.confirm(
+        `Tem certeza que deseja desfazer o resultado da categoria ${categoria}?`,
+      )
+    )
+      return;
+    setLoadingWinner(true);
+
+    const { error } = await supabase
+      .from("apostas_oscar")
+      .update({ vencedor_real: null }) // Seta nulo para voltar ao status Pendente
+      .eq("categoria", categoria);
+
+    setLoadingWinner(false);
+    if (!error) carregarApostas();
+  };
+
+  // Apaga a aposta individual (Agora pode apagar a qualquer momento)
   const deletarAposta = async (id) => {
     if (!window.confirm("Certeza que deseja apagar essa aposta?")) return;
     const { error } = await supabase
@@ -100,7 +116,7 @@ export default function App() {
 
   return (
     <div className="bg-background-dark text-slate-100 min-h-[100dvh] pb-28 font-display">
-      {/* HEADER DINÂMICO - PLACAR */}
+      {/* HEADER PLACAR */}
       <header className="sticky top-0 z-50 border-b border-white/10 backdrop-blur-md bg-background-dark/90 px-4 py-4">
         <div className="max-w-md mx-auto flex flex-col">
           <span className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2 flex items-center gap-2">
@@ -137,7 +153,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* CARDS DE APOSTAS */}
+      {/* CARDS */}
       <main className="max-w-md mx-auto px-4 py-6 space-y-4">
         {Object.entries(apostasPorCategoria).map(([categoria, dados]) => {
           const isFinalizado = !!dados.vencedor_real;
@@ -165,7 +181,7 @@ export default function App() {
                 </span>
               </div>
 
-              {/* LISTA DE PALPITES FORMATADA */}
+              {/* PALPITES */}
               <div className="space-y-3 mb-4">
                 {dados.palpites.map((palpite) => {
                   let bgClass = "bg-white/5 border-white/10";
@@ -174,7 +190,6 @@ export default function App() {
 
                   const apostouPerde = palpite.tipo === "perde";
 
-                  // Lógica visual pós-resultado
                   if (isFinalizado) {
                     const acertouGanha =
                       !apostouPerde && palpite.indicado === dados.vencedor_real;
@@ -197,29 +212,8 @@ export default function App() {
                       key={palpite.id}
                       className={`flex flex-col p-3 rounded-xl border ${bgClass} transition-all relative group gap-2`}
                     >
-                      {/* Linha Superior: Nome + Badge */}
                       <div className="flex justify-between items-center w-full">
                         <div className="flex items-center gap-2">
-                          {!isFinalizado && (
-                            <button
-                              onClick={() => deletarAposta(palpite.id)}
-                              className="text-slate-600 hover:text-red-400 p-1"
-                            >
-                              <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                />
-                              </svg>
-                            </button>
-                          )}
                           <span
                             className={`text-xs uppercase tracking-widest ${textClass}`}
                           >
@@ -227,15 +221,36 @@ export default function App() {
                           </span>
                         </div>
 
-                        {/* Etiqueta Visual de Ganha/Perde */}
-                        <span
-                          className={`text-[9px] px-2 py-0.5 rounded uppercase font-bold tracking-wider ${apostouPerde ? "bg-orange-500/10 text-orange-400 border border-orange-500/20" : "bg-blue-500/10 text-blue-400 border border-blue-500/20"}`}
-                        >
-                          Apostou que {apostouPerde ? "Perde" : "Ganha"}
-                        </span>
+                        {/* Container com Etiqueta + Lixeira */}
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`text-[9px] px-2 py-0.5 rounded uppercase font-bold tracking-wider ${apostouPerde ? "bg-orange-500/10 text-orange-400 border border-orange-500/20" : "bg-blue-500/10 text-blue-400 border border-blue-500/20"}`}
+                          >
+                            {apostouPerde ? "Perde" : "Ganha"}
+                          </span>
+
+                          {/* Botão de Deletar Palpite: Agora sempre visível */}
+                          <button
+                            onClick={() => deletarAposta(palpite.id)}
+                            className="text-slate-500 hover:text-red-400 transition-colors"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Linha Inferior: Indicado */}
                       <span
                         className={`text-sm font-bold pl-1 ${isFinalizado && (textClass.includes("green") || textClass.includes("red")) ? textClass : "text-white"}`}
                       >
@@ -285,12 +300,35 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="flex justify-between items-center bg-primary/5 p-3 rounded-xl border border-primary/20">
-                    <span className="text-[10px] text-primary uppercase tracking-widest font-bold">
-                      Vencedor Oficial
-                    </span>
-                    <span className="text-sm font-black text-white">
-                      {dados.vencedor_real}
-                    </span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-primary uppercase tracking-widest font-bold">
+                        Vencedor Oficial
+                      </span>
+                      <span className="text-sm font-black text-white">
+                        {dados.vencedor_real}
+                      </span>
+                    </div>
+                    {/* Botão de Desfazer Resultado do Mesário */}
+                    <button
+                      onClick={() => desfazerVencedor(categoria)}
+                      disabled={loadingWinner}
+                      className="text-primary hover:text-white p-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors"
+                      title="Desfazer Resultado"
+                    >
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                        />
+                      </svg>
+                    </button>
                   </div>
                 )}
               </div>
